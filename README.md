@@ -1,8 +1,8 @@
-# Cisco ACI PBR Service-Graph module for Network Infrastructure Automation (NIA)
+# Cisco ACI Endpoint Security Group module for Network Infrastructure Automation (NIA)
 
-This Terraform module allows users to dynamically create and update **Cisco ACI** Service Redirection Policy and Destinations by leveraging [Consul](https://www.consul.io/) catalog information.  
+This Terraform module allows users to dynamically create and update **Cisco ACI** Endpoint Security Group by leveraging [Consul](https://www.consul.io/) catalog information.
 
-The **Cisco ACI** fabric can act as a distributed stateless load-balancer sitting in front of any pool of workloads, regardless of their form-factor. For this module to work, the user should have deployed a Service-Graph template with Policy-Based Redirect (PBR) and service redirection enabled. For more information on how to deploy Cisco ACI Service Graph and PBR, please refer to the configuration guide and this [white paper](https://www.cisco.com/c/en/us/solutions/collateral/data-center-virtualization/application-centric-infrastructure/white-paper-c11-739971.html).
+The **Cisco ACI** fabric can act as a distributed stateless load-balancer sitting in front of any pool of workloads, regardless of their form-factor. For this module to work, the user should have deployed a Tenant template with Application Profile and VRF. For more information on how to deploy Cisco ACI Endpoint Security Group, please refer to the configuration guide and this [white paper](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/aci/apic/sw/5-x/security/cisco-apic-security-configuration-guide-50x/m-endpoint-security-groups.html?dtid=osscdc000283).
 
 Using this Terraform module in conjunction with **consul-terraform-sync** enables administrators to automatically scale out or scale in backend server pools without having to manually reconfigure **Cisco ACI** policies.
 
@@ -11,10 +11,10 @@ Using this Terraform module in conjunction with **consul-terraform-sync** enable
 
 ## Feature
 This module supports the following:
-* Create, Update and Delete Redirection Destination Policies (**vnsRedirectDest**).
-* Create and Update Service Redirection Policies (**vnsSvcRedirectPol**). 
+* Create, Update and Delete Endpoint Security Group Selector (**fvRsCustQosPol**).
+* Create and Update Endpoint Security Groups (**fvESg**).
 
-If there is a missing feature or a bug - [open an issue ](https://github.com/CiscoDevNet/terraform-aci-autoscaling-nia/issues/new).
+If there is a missing feature or a bug - [open an issue ](https://github.com/CiscoDevNet/terraform-aci-esg-nia/issues/new).
 
 ## Caveats
 * Currently Consul nodes MAC address must be specified as `meta` in the Consul service definition.
@@ -98,22 +98,16 @@ buffer_period {
   max = "20s"
 }
 
-service {
-  name = "frontend"
-  datacenter = "dc1"
-}
-
 task {
-  name = "aci-svc-scale"
-  description = "Automatically Scale ACI Service Redirection Destinations"
-  source = "CiscoDevNet/terraform-aci-autoscaling-nia"
-  version = "0.0.1"
+  name = "cts-svc-esg"
+  description = "Automatically Scale ACI Service ESGs"
+  source = "/Users/anvjain/nia/terraform-nia/terraform-aci-esg-nia"
   providers = ["aci.aci1"]
-  services = ["frontend"]
-  variable_files = [ "/Users/nvermand/Documents/Dev/terraform/consul-terraform-sync/inputs.tf"]
+  services = ["web"]
+  variable_files = [ "/Users/anvjain/nia/input.tf"]
 }
 ```
- 5. Fill the **`inputs.tf`** file with the required module input and place it in the same directory as **`tasks.hcl`**. Currently the user must specify the **Cisco ACI** Tenant where the policy must be deployed, as well as the Service Redirection Policy name. You can use the example below.
+ 5. Fill the **`inputs.tf`** file with the required module input and place it in the same directory as **`tasks.hcl`**. Currently the user must specify the **Cisco ACI** Tenant where the policy must be deployed, as well as the Endpoint Security Group name. You can use the example below.
  ```terraform
 tenant_name                       = "common"
 service_redirection_policy_prefix = "nia"
@@ -124,7 +118,7 @@ $ consul-terraform-sync -config-dir <path_to_configuration_directory>
 ```
 **consul-terraform-sync** will create the appropriate policies in accordance to the Consul catalog.
 
-**consul-terraform-sync** is now subscribed to the Consul catalog. Any updates to the services identified in the task will result in updating the **Cisco ACI** Redirection Destination Policies.
+**consul-terraform-sync** is now subscribed to the Consul catalog. Any updates to the services identified in the task will result in updating the **Cisco ACI** Endpoint Security Group Selectors.
 
 
 **~> Note:** If you are interested in how **consul-terraform-sync** works, please refer to this [section](#how-does-consul-terraform-sync-work).
@@ -137,50 +131,9 @@ $ consul-terraform-sync -config-dir <path_to_configuration_directory>
 | Name | Description | Type | Default | Required |
 |------|-------------------------------------|------|---------|:--------:|
 | aci\_tenant | Cisco ACI Tenant name, e.g., prod_tenant. | `string` | common | yes |
-| service\_redirection\_policy\_prefix | Prefix for the service redirection policy that is created when the first service instance is declared in the Consul catalog. The format is `<prefix>-<service-name>-svc` | `string` |  | no |
+| service\_redirection\_policy\_prefix | Prefix for the Endpoint Security Group that is created when the first service instance is declared in the Consul catalog. The format is `<prefix>-<service-name>-svc` | `string` |  | no |
 | services | Consul services monitored by consul-terraform-sync | <pre>map(<br>    object({<br>      id        = string<br>      name      = string<br>      address   = string<br>      port      = number<br>      meta      = map(string)<br>      tags      = list(string)<br>      namespace = string<br>      status    = string<br><br>      node                  = string<br>      node_id               = string<br>      node_address          = string<br>      node_datacenter       = string<br>      node_tagged_addresses = map(string)<br>      node_meta             = map(string)<br>    })<br>  )</pre> | n/a | yes |
 
-
-## Outputs:
-
-| Name | Description |
-|------|-------------|
-| workload_pool | Map that includes information about the created redirection destination policies, namely redirection destination names, service names, IP and MAC addresses  |
-| service_redirection_artifact | Map that includes name and Dn of the created ACI Redirection Policies |
-
-Example of module output:
-```terraform
-module_output1 = {
-  "app" = [
-    {
-      "id" = "app1"
-      "ip" = "172.33.2.8"
-      "mac" = "F4:14:83:E9:BE:85"
-    },
-  ]
-  "web" = [
-    {
-      "id" = "web0"
-      "ip" = "172.31.43.78"
-      "mac" = "CE:65:9E:1D:6A:DF"
-    },
-    {
-      "id" = "web1"
-      "ip" = "172.31.51.85"
-      "mac" = "F1:CC:A2:25:FE:07"
-    },
-    {
-      "id" = "web3"
-      "ip" = "192.168.128.17"
-      "mac" = "2E:10:45:0D:FA:EB"
-    },
-  ]
-}
-module_output2 = {
-  "consul-nia-app-svc" = "uni/tn-common/svcCont/svcRedirectPol-consul-nia-app-svc"
-  "consul-nia-web-svc" = "uni/tn-common/svcCont/svcRedirectPol-consul-nia-web-svc"
-}
-```
 
 ## How does consul-terraform-sync work?
 
@@ -246,15 +199,16 @@ If a task and is defined, one or more services are associated with the task, pro
             username    = var.aci.username
           }
       
-         # Automatically Scale ACI Service Redirection Destinations
-         module "aci-svc-scale" {
-           source   = "CiscoDevNet/terraform-aci-autoscaling-nia"
-           version  = "0.0.1"
-           services = var.services
+         # Automatically Scale ACI Service ESGs
+          module "cts-svc-esg" {
+            source   = "/Users/anvjain/nia/terraform-aci-esg-nia"
+            services = var.services
 
-           service_redirection_policy_prefix = var.service_redirection_policy_prefix
-           tenant_name                       = var.tenant_name
-         }
+            application_profile_name = var.application_profile_name
+            esg_prefix               = var.esg_prefix
+            tenant_name              = var.tenant_name
+            vrf_name                 = var.vrf_name
+          }
          ```
       * **variables.tf:**
         * This is the variables.tf file defined in the module.
@@ -268,39 +222,32 @@ If a task and is defined, one or more services are associated with the task, pro
 
          # Service definition protocol v0
          variable "services" {
-           description = "Consul services monitored by Consul Terraform Sync"
-           type = map(
-             object({
-               id        = string
-               name      = string
-               address   = string
-               port      = number
-               meta      = map(string)
-               tags      = list(string)
-               namespace = string
-               status    = string
+          description = "Consul services monitored by Consul NIA"
+          type = map(
+            object({
+              id        = string
+              name      = string
+              address   = string
+              port      = number
+              status    = string
+              meta      = map(string)
+              tags      = list(string)
+              namespace = string
 
-               node                  = string
-               node_id               = string
-               node_address          = string
-               node_datacenter       = string
-               node_tagged_addresses = map(string)
-               node_meta             = map(string)
-             })
-           )
-         }
+              node                  = string
+              node_id               = string
+              node_address          = string
+              node_datacenter       = string
+              node_tagged_addresses = map(string)
+              node_meta             = map(string)
+            })
+          )
+        }
 
-         variable "aci" {
-           default     = null
-           description = "Configuration object for aci"
-           type = object({
-             alias       = string
-             cert_name   = string
-             private_key = string
-             url         = string
-             username    = string
-           })
-         }
+        variable "tenant_name" {}
+        variable "application_profile_name" {}
+        variable "vrf_name" {}
+        variable "esg_prefix" {}
         ```
       * **terraform.tfvars:**
          * This is the most important file generated by consul-terraform-sync.
@@ -311,32 +258,34 @@ If a task and is defined, one or more services are associated with the task, pro
          
          ```terraform
          services = {
-           "web0" : {
-             id e             = "web1"
-             name            = "web"
-             address         = "172.31.51.85"
-             port            = 80
-             meta            = {
-               mac_address = "DE:AD:BE:EF:FA:CE"
-             }
-             tags            = ["dc1", "nginx", "test", "web"]
-             namespace       = null
-             status          = "passing"
-             node            = "i-0f92f7eb4b6fb460a"
-             node_id         = "778506df-a1b2-65e0-fe1e-eafd2d1162a8"
-             node_address    = "172.31.51.85"
-             node_datacenter = "us-east-1"
-             node_tagged_addresses = {
-               lan      = "172.31.51.85"
-               lan_ipv4 = "172.31.51.85"
-               wan      = "172.31.51.85"
-               wan_ipv4 = "172.31.51.85"
-             }
-             node_meta = {
-               consul-network-segment = ""
-             }
-           }
-         }
+          "web-1.ANVJAIN-M-L28H.dc1" : {
+            id      = "web-1"
+            name    = "web"
+            kind    = ""
+            address = "10.0.0.162"
+            port    = 8080
+            meta = {
+              mac_address = "00:50:56:8a:92:74"
+            }
+            tags            = ["rails"]
+            namespace       = null
+            status          = "critical"
+            node            = "ANVJAIN-M-L28H"
+            node_id         = "6c16cf70-3573-bf40-38b6-ead07f44eab4"
+            node_address    = "127.0.0.1"
+            node_datacenter = "dc1"
+            node_tagged_addresses = {
+              lan      = "127.0.0.1"
+              lan_ipv4 = "127.0.0.1"
+              wan      = "127.0.0.1"
+              wan_ipv4 = "127.0.0.1"
+            }
+            node_meta = {
+              consul-network-segment = ""
+            }
+            cts_user_defined_meta = {}
+          }
+        }
          ```
       * **Network Infrastructure Automation (NIA) compatible modules are built to utilize the above service variables**.
     6. **consul-terraform-sync** manages the entire Terraform workflow of plan, apply and destroy for all the individual workspaces corrresponding to the defined     "tasks" based on the updates to the services to those tasks.
