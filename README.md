@@ -2,26 +2,22 @@
 
 This Terraform module allows users to dynamically create and update **Cisco ACI** Endpoint Security Group by leveraging [Consul](https://www.consul.io/) catalog information.
 
-The **Cisco ACI** fabric can act as a distributed stateless load-balancer sitting in front of any pool of workloads, regardless of their form-factor. For this module to work, the user should have deployed a Tenant template with Application Profile and VRF. For more information on how to deploy Cisco ACI Endpoint Security Group, please refer to the configuration guide and this [white paper](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/aci/apic/sw/5-x/security/cisco-apic-security-configuration-guide-50x/m-endpoint-security-groups.html?dtid=osscdc000283).
+The **Cisco ACI** fabric can act as a distributed stateless segmentation enforcement device sitting in front of any pool of workloads, regardless of their form-factor. For this module to work, the user should have deployed a Tenant template with Application Profile and VRF. For more information on how to deploy Cisco ACI Endpoint Security Group, please refer to the configuration guide and this [white paper](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/aci/apic/sw/5-x/security/cisco-apic-security-configuration-guide-50x/m-endpoint-security-groups.html?dtid=osscdc000283).
 
-Using this Terraform module in conjunction with **consul-terraform-sync** enables administrators to automatically scale out or scale in backend server pools without having to manually reconfigure **Cisco ACI** policies.
+Using this Terraform module in conjunction with **consul-terraform-sync** enables administrators to automatically manage ESGs and ESG selectors based on Consul services definitions and dynamic updates without having to manually reconfigure **Cisco ACI** policies.
 
 #### Note: This Terraform module is designed to be used only with **consul-terraform-sync**.
 
 
 ## Feature
 This module supports the following:
-* Create, Update and Delete Endpoint Security Group Selector (**fvRsCustQosPol**).
 * Create and Update Endpoint Security Groups (**fvESg**).
+* Create, Update and Delete Endpoint Security Group Selector (**fvEPSelector**).
 
 If there is a missing feature or a bug - [open an issue ](https://github.com/CiscoDevNet/terraform-aci-esg-nia/issues/new).
 
 ## Caveats
-* Currently Consul nodes MAC address must be specified as `meta` in the Consul service definition.
-* If the redirection policy becomes empty (no remaining healthy service), it is not deleted.
 * All Consul services part of the same "task" must be defined in the same ACI VRF.
-
-**~>Note** This module only manages Redirection Policy lifecycle, it does not automate the creation of the Service-Graph template and deployment.
 
 ## What is consul-terraform-sync?
 
@@ -46,11 +42,11 @@ Links refer to download and installation/instructions for each component.
 
 | Name | Version |
 |------|---------|
-| aci | >= 0.4.1 |  
+| aci | >= 0.6.0 |  
 
 
 ## Compatibility
-This module is meant for use with **consul-terraform-sync >= 0.1.0**, **Terraform >= 0.13** and **Cisco ACI >= 4.2**.
+This module is meant for use with **consul-terraform-sync >= 0.1.0**, **Terraform >= 0.13** and **Cisco ACI >= 5.0**.
 
 ## Usage
 In order to use this module, you will need to install **consul-terraform-sync**, create a **"task"** with this Terraform module as a source within the task, and run **consul-terraform-sync**.
@@ -80,7 +76,7 @@ driver "terraform" {
   required_providers {
     aci = {
     source =  "CiscoDevNet/aci"
-    version = "0.4.1"
+    version = "0.6.0"
     }
   }
 }
@@ -100,17 +96,19 @@ buffer_period {
 
 task {
   name = "cts-svc-esg"
-  description = "Automatically Scale ACI Service ESGs"
+  description = "Automatically Scale ACI ESGs"
   source = "/Users/anvjain/nia/terraform-nia/terraform-aci-esg-nia"
   providers = ["aci.aci1"]
   services = ["web"]
   variable_files = [ "/Users/anvjain/nia/input.tf"]
 }
 ```
- 5. Fill the **`inputs.tf`** file with the required module input and place it in the same directory as **`tasks.hcl`**. Currently the user must specify the **Cisco ACI** Tenant where the policy must be deployed, as well as the Endpoint Security Group name. You can use the example below.
+ 5. Fill the **`inputs.tf`** file with the required module input and place it in the same directory as **`tasks.hcl`**. Currently the user must specify the **Cisco ACI** Tenant and the the Application Profile where the ESG must be created, the name of the VRF in the same tenant to be associated with the created ESGs and as well as an Endpoint Security Group name prefix. You can use the example below.
  ```terraform
-tenant_name                       = "common"
-service_redirection_policy_prefix = "nia"
+tenant_name              = "common"
+application_profile_name = "nia_ap"
+vrf_name                 = "default"
+esg_prefix               = "nia"
 ```
  6. Start consul-terraform-sync.
 ```
@@ -118,7 +116,7 @@ $ consul-terraform-sync -config-dir <path_to_configuration_directory>
 ```
 **consul-terraform-sync** will create the appropriate policies in accordance to the Consul catalog.
 
-**consul-terraform-sync** is now subscribed to the Consul catalog. Any updates to the services identified in the task will result in updating the **Cisco ACI** Endpoint Security Group Selectors.
+**consul-terraform-sync** is now subscribed to the Consul catalog. Any updates to the services identified in the task will result in updating the **Cisco ACI** Endpoint Security Group and ESG Selectors.
 
 
 **~> Note:** If you are interested in how **consul-terraform-sync** works, please refer to this [section](#how-does-consul-terraform-sync-work).
@@ -130,8 +128,10 @@ $ consul-terraform-sync -config-dir <path_to_configuration_directory>
 
 | Name | Description | Type | Default | Required |
 |------|-------------------------------------|------|---------|:--------:|
-| aci\_tenant | Cisco ACI Tenant name, e.g., prod_tenant. | `string` | common | yes |
-| service\_redirection\_policy\_prefix | Prefix for the Endpoint Security Group that is created when the first service instance is declared in the Consul catalog. The format is `<prefix>-<service-name>-svc` | `string` |  | no |
+| aci\_tenant | Cisco ACI Tenant name, e.g., prod_tenant. | `string` | - | yes |
+| aci\_application\_profile | Cisco ACI Application Profile name, e.g., prod_ap. | `string` | - | yes |
+| aci\_vrf | Cisco ACI VRF name, e.g., prod_vrf. | `string` | - | yes |
+| esg\_prefix | Prefix for the Endpoint Security Group that is created when the first service instance is declared in the Consul catalog. The format is `<prefix>-<service-name>-svc` | `string` | - | no |
 | services | Consul services monitored by consul-terraform-sync | <pre>map(<br>    object({<br>      id        = string<br>      name      = string<br>      address   = string<br>      port      = number<br>      meta      = map(string)<br>      tags      = list(string)<br>      namespace = string<br>      status    = string<br><br>      node                  = string<br>      node_id               = string<br>      node_address          = string<br>      node_datacenter       = string<br>      node_tagged_addresses = map(string)<br>      node_meta             = map(string)<br>    })<br>  )</pre> | n/a | yes |
 
 
@@ -264,9 +264,7 @@ If a task and is defined, one or more services are associated with the task, pro
             kind    = ""
             address = "10.0.0.162"
             port    = 8080
-            meta = {
-              mac_address = "00:50:56:8a:92:74"
-            }
+            meta    = {}
             tags            = ["rails"]
             namespace       = null
             status          = "critical"
