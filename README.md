@@ -96,8 +96,8 @@ buffer_period {
 
 task {
   name = "cts-svc-esg"
-  description = "Automatically Scale ACI ESGs"
-  source = "/Users/anvjain/nia/terraform-nia/terraform-aci-esg-nia"
+  description = "Automatically Deploy ACI ESGs"
+  source = "CiscoDevNet/esg-nia/aci"
   providers = ["aci.aci1"]
   services = ["web"]
   variable_files = [ "/Users/anvjain/nia/input.tf"]
