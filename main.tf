@@ -1,6 +1,6 @@
 locals {
   #loops through variables in service (terraform.tfvars file)
-  service_payload            = [for _, s in var.services : s]
+  service_payload            = [for _, s in var.services : s if s.status == "passing"]
   #Compute new cts service block, adding ACI specific information to it. This enables for_each meta argument to loop through ACI and cts data within the same resource block.
   synthetic_payload          = [for s in local.service_payload : merge(s, { esg = format("%s-%s-svc", var.esg_prefix, s.name), match_expression = format("ip=='%s'", s.address == "" ? s.node_address : s.address) })]
 
